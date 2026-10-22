@@ -23,5 +23,8 @@ models/*
 !models/.gitkeep
 results/*
 !results/.gitkeep
+!results/metrics.csv
+!results/forecasts.csv
+!results/data_quality.json
 data/processed/*
 !data/processed/.gitkeep

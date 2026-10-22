@@ -1,0 +1,52 @@
+{
+  "source": "C:\\AI\\ai-oil-test\\data\\raw\\DCOILBRENTEU_2015-2026.csv",
+  "raw_rows": 3064,
+  "valid_observations": 2982,
+  "missing_or_non_numeric_prices": 82,
+  "invalid_dates": 0,
+  "duplicate_dates": 0,
+  "first_valid_date": "2015-01-02",
+  "last_valid_date": "2026-09-30",
+  "split_boundaries": {
+    "train_end": "2022-12-31",
+    "validation_start": "2023-01-01",
+    "validation_end": "2024-12-31",
+    "test_start": "2025-01-01",
+    "test_end": "2026-09-30"
+  },
+  "target_observations_by_horizon": {
+    "1": {
+      "train": 2014,
+      "validation": 505,
+      "test": 442
+    },
+    "5": {
+      "train": 2010,
+      "validation": 505,
+      "test": 442
+    }
+  },
+  "features": [
+    "price_lag_0",
+    "price_lag_1",
+    "price_lag_2",
+    "price_lag_3",
+    "price_lag_5",
+    "price_lag_10",
+    "price_lag_20",
+    "return_lag_1",
+    "return_lag_2",
+    "return_lag_5",
+    "return_lag_10",
+    "return_lag_20",
+    "price_mean_5",
+    "price_mean_10",
+    "price_mean_20",
+    "price_std_5",
+    "price_std_10",
+    "price_std_20"
+  ],
+  "missing_value_policy": "Drop rows without a valid date or numeric price; do not interpolate.",
+  "scaling": "StandardScaler fitted inside Ridge pipeline on each fit split only.",
+  "test_policy": "Fixed model settings; fit on train+validation; test is evaluation-only."
+}

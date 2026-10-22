@@ -23,7 +23,7 @@ REQUIRED_PATHS = (
     "README.md",
     ".gitignore",
 )
-MODULES = ("data_loader.py", "features.py", "train.py", "predict.py", "evaluate.py")
+MODULES = ("data_loader.py", "features.py", "train.py", "predict.py", "evaluate.py", "experiment.py")
 
 
 def main() -> int:
@@ -38,7 +38,7 @@ def main() -> int:
 
     for module in MODULES:
         path = ROOT / "src" / module
-        state = "có khung; chờ bàn giao chức năng" if path.is_file() else "chưa có"
+        state = "đã tích hợp" if path.is_file() else "chưa có"
         if module == "data_loader.py" and path.is_file():
             state = "đã có loader dữ liệu lịch sử"
         print(f"src/{module}: {state}")
@@ -48,8 +48,10 @@ def main() -> int:
         for item in (ROOT / "models").glob("*")
         if item.is_file() and item.name != ".gitkeep"
     ]
-    print(f"Artifact mô hình: {len(artifacts)} tệp")
-    print("Dự báo và đánh giá: chưa khả dụng nếu chưa bàn giao code/artifact.")
+    print(f"Artifact mô hình: {len(artifacts)} tệp (mô hình được fit khi chạy thực nghiệm)")
+    for output in ("metrics.csv", "forecasts.csv", "data_quality.json"):
+        print(f"results/{output}: {'có' if (ROOT / 'results' / output).is_file() else 'chưa có'}")
+    print("Dự báo và đánh giá: xem `python -m src.experiment` để tạo hoặc cập nhật kết quả.")
     return 0
 
 

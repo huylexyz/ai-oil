@@ -1,40 +1,34 @@
-# Dự báo biến động giá dầu Brent
+# Dự báo giá dầu Brent
 
-Dự án nghiên cứu ứng dụng Machine Learning để dự báo giá dầu Brent theo dữ liệu lịch sử, với thời hạn dự báo 1 và 5 phiên. Các mô hình dự kiến gồm Naive Forecast, Ridge Regression, Random Forest và XGBoost; giao diện dùng Streamlit và Plotly.
+Thực nghiệm dự báo giá Brent theo 1 và 5 phiên quan sát hợp lệ, với Naive Persistence, Ridge Regression, Random Forest và XGBoost. Giao diện kết quả dùng Streamlit.
 
-## Trạng thái bàn giao
+## Chạy thực nghiệm
 
-Repository hiện có dữ liệu giá lịch sử trong `data/raw/`. Các mô-đun huấn luyện, dự báo và đánh giá mô hình chưa được bàn giao; ứng dụng không tạo hoặc hiển thị dự báo hay chỉ số thực nghiệm giả. Hãy chạy `python scripts/check_project.py` để xem trạng thái tích hợp hiện tại.
-
-## Cài đặt và chạy
-
-```bash
-python -m venv .venv
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
+```powershell
 python -m pip install -r requirements.txt
-python scripts/check_project.py
-python -m compileall -q app.py src scripts
+python -m src.experiment
 python -m streamlit run app.py
 ```
 
-Ứng dụng hiển thị chuỗi giá lịch sử khi dữ liệu khả dụng. Tính năng dự báo và bảng đánh giá sẽ khả dụng sau khi nhóm bàn giao các mô-đun và artifact mô hình tương ứng.
+`src.experiment` kiểm tra kỳ vọng 2.982 quan sát hợp lệ, chạy pipeline và ghi:
 
-## Dữ liệu
+- `results/metrics.csv`: MAE, RMSE, Directional Accuracy theo mô hình, horizon và tập. Directional Accuracy của Naive Persistence để trống vì mô hình dự báo giá không đổi, không dự báo hướng.
+- `results/forecasts.csv`: dự báo cùng giá thực tế theo schema trong `src/config.py`.
+- `results/data_quality.json`: chất lượng dữ liệu, số lượng quan sát từng tập và quy tắc tiền xử lý.
 
-Đặt CSV trong `data/raw/`. Mặc định ứng dụng đọc `data/raw/DCOILBRENTEU_2015-2026.csv`, với cột ngày `observation_date` và cột giá `DCOILBRENTEU`. Dữ liệu thiếu được bỏ qua khi vẽ lịch sử. Không có dữ liệu hay kết quả mô phỏng được tạo làm dữ liệu nghiên cứu.
+Các artifact kết quả được lưu trong Git để dashboard có thể hiển thị ngay. Có thể chạy lại từ nút trong ứng dụng hoặc từ dòng lệnh.
 
-## Quy ước tích hợp
+## Quy trình và quy ước
 
-- Module Python đặt trong `src/`; đường dẫn dữ liệu và cấu hình tập trung trong `src/config.py`.
-- Horizon dùng số phiên giao dịch: `1` hoặc `5`.
-- Bảng dự báo/đánh giá dùng cùng các cột `model`, `horizon`, `origin_date`, `target_date`, `actual`, `predicted`, `split`.
-- Train, validation và test phải được chia theo thời gian, không xáo trộn thứ tự quan sát.
-- Mỗi thành viên làm trên nhánh riêng, mở Pull Request vào `main`; yêu cầu review trước khi merge. Không push trực tiếp lên `main`.
+- Nguồn `data/raw/DCOILBRENTEU_2015-2026.csv` không bị sửa. Ngày không có giá số hợp lệ bị loại bỏ, không nội suy.
+- Đặc trưng tại ngày dự báo gồm giá hiện tại và các độ trễ 1, 2, 3, 5, 10, 20 phiên; lợi suất trễ 1, 2, 5, 10, 20 phiên; trung bình và độ lệch chuẩn rolling 5, 10, 20 phiên. Tất cả rolling chỉ nhìn lùi và bao gồm giá tại ngày gốc.
+- Horizon tính bằng số quan sát hợp lệ. Tập được gán theo ngày đích: Train đến 2022-12-31; Validation 2023-01-01–2024-12-31; Test 2025-01-01–2026-09-30.
+- Validation dự báo từ mô hình fit trên Train. Test dự báo từ mô hình fit trên Train+Validation. Tham số được cố định trước; Test chỉ dùng để đánh giá cuối.
+- Ridge dùng StandardScaler bên trong pipeline, fit riêng trên phần dữ liệu huấn luyện ở mỗi lượt. Mô hình cây không cần chuẩn hóa.
+- Directional Accuracy so sánh dấu của thay đổi giá dự báo với thay đổi giá thực tế, cả hai tính từ giá tại ngày gốc.
+- Naive Persistence lặp lại giá tại ngày gốc cho cả hai horizon. Đây là baseline cho sai số giá, không phải baseline dự báo hướng; DA không áp dụng.
+- Horizon 1 và 5 dùng riêng mục tiêu tương lai tương ứng. Dữ liệu không bị xáo trộn.
 
-## Cấu trúc
+## Dữ liệu và môi trường
 
-```text
-data/{raw,processed}/  notebooks/  src/  models/  results/
-reports/  slides/  docs/  scripts/  app.py
-```
+CSV cần có cột `observation_date` và `DCOILBRENTEU`. Các thư viện được khai báo trong `requirements.txt`. `python scripts/check_project.py` kiểm tra cấu trúc tích hợp cơ bản.

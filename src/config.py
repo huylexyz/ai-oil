@@ -10,6 +10,15 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 DEFAULT_DATA_PATH = RAW_DATA_DIR / "DCOILBRENTEU_2015-2026.csv"
 
 FORECAST_HORIZONS = (1, 5)
+SPLIT_BOUNDARIES = {
+    "train_end": "2022-12-31",
+    "validation_start": "2023-01-01",
+    "validation_end": "2024-12-31",
+    "test_start": "2025-01-01",
+    "test_end": "2026-09-30",
+}
+FORECASTS_PATH = RESULTS_DIR / "forecasts.csv"
+METRICS_PATH = RESULTS_DIR / "metrics.csv"
 RESULT_COLUMNS = (
     "model",
     "horizon",

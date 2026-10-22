@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import DEFAULT_DATA_PATH
+from .config import CURRENT_DATA_PATH, DEFAULT_DATA_PATH
 
 DATE_COLUMN = "observation_date"
 PRICE_COLUMN = "DCOILBRENTEU"
@@ -27,3 +27,9 @@ def load_brent_data(path: str | Path = DEFAULT_DATA_PATH) -> pd.DataFrame:
     data = data.dropna(subset=[DATE_COLUMN, PRICE_COLUMN])
     data = data.sort_values(DATE_COLUMN).drop_duplicates(DATE_COLUMN).reset_index(drop=True)
     return data
+
+
+def load_current_brent_data() -> tuple[pd.DataFrame, Path]:
+    """Load the maintained observations, falling back to the original CSV."""
+    source = CURRENT_DATA_PATH if CURRENT_DATA_PATH.is_file() else DEFAULT_DATA_PATH
+    return load_brent_data(source), source

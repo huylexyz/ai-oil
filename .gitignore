@@ -21,6 +21,7 @@ Thumbs.db
 .streamlit/secrets.toml
 models/*
 !models/.gitkeep
+!models/forecast_models.joblib
 results/*
 !results/.gitkeep
 !results/metrics.csv

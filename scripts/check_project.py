@@ -23,7 +23,15 @@ REQUIRED_PATHS = (
     "README.md",
     ".gitignore",
 )
-MODULES = ("data_loader.py", "features.py", "train.py", "predict.py", "evaluate.py", "experiment.py")
+MODULES = (
+    "data_loader.py",
+    "features.py",
+    "train.py",
+    "predict.py",
+    "data_update.py",
+    "evaluate.py",
+    "experiment.py",
+)
 
 
 def main() -> int:
@@ -48,10 +56,10 @@ def main() -> int:
         for item in (ROOT / "models").glob("*")
         if item.is_file() and item.name != ".gitkeep"
     ]
-    print(f"Artifact mô hình: {len(artifacts)} tệp (mô hình được fit khi chạy thực nghiệm)")
+    print(f"Artifact mô hình: {len(artifacts)} tệp")
     for output in ("metrics.csv", "forecasts.csv", "data_quality.json"):
         print(f"results/{output}: {'có' if (ROOT / 'results' / output).is_file() else 'chưa có'}")
-    print("Dự báo và đánh giá: xem `python -m src.experiment` để tạo hoặc cập nhật kết quả.")
+    print("Chạy `python -m src.experiment` để đánh giá lịch sử và lưu artifact suy luận.")
     return 0
 
 

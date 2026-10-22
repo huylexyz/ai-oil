@@ -3,6 +3,8 @@
 import pandas as pd
 
 from .config import FORECAST_HORIZONS, RESULT_COLUMNS, SPLIT_BOUNDARIES
+from .features import build_features, feature_columns
+from .train import fingerprint_data, load_forecasting_artifact
 
 
 def split_for_date(value) -> str | None:
@@ -70,3 +72,52 @@ def build_forecasts(features: pd.DataFrame, feature_names: list[str]) -> pd.Data
                     )
 
     return pd.DataFrame(records, columns=RESULT_COLUMNS)
+
+
+def predict_latest(
+    data: pd.DataFrame,
+    model_name: str,
+    horizon: int,
+    artifact_path=None,
+) -> dict:
+    """Infer a future price from the latest known observation and saved model."""
+    from .config import MODEL_ARTIFACT_PATH
+
+    if horizon not in FORECAST_HORIZONS:
+        raise ValueError(f"Horizon phải là một trong {FORECAST_HORIZONS}.")
+    if model_name not in ("Ridge Regression", "Random Forest", "XGBoost"):
+        raise ValueError(f"Mô hình không được hỗ trợ: {model_name}")
+
+    expected_features = feature_columns()
+    bundle = load_forecasting_artifact(artifact_path or MODEL_ARTIFACT_PATH)
+    if bundle["data_sha256"] != fingerprint_data(data):
+        raise ValueError(
+            "Artifact không được huấn luyện trên bản dữ liệu đang chọn. "
+            "Hãy cập nhật/huấn luyện lại mô hình trước khi suy luận."
+        )
+
+    features = build_features(data)
+    latest = features.iloc[-1]
+    artifact = bundle["models"].get(f"{model_name}|{horizon}")
+    if artifact is None:
+        raise ValueError(f"Không tìm thấy artifact {model_name}, horizon {horizon}.")
+    metadata = artifact["metadata"]
+    if metadata["feature_names"] != expected_features or metadata["horizon"] != horizon:
+        raise ValueError("Metadata artifact không khớp đặc trưng hoặc horizon yêu cầu.")
+
+    latest_price = float(latest["actual"])
+    inference_row = latest.loc[expected_features].astype("float64").to_frame().T
+    predicted_price = float(artifact["estimator"].predict(inference_row)[0])
+    change_percent = (predicted_price - latest_price) / latest_price * 100
+    return {
+        "model": model_name,
+        "horizon": horizon,
+        "latest_data_date": pd.Timestamp(latest["origin_date"]).strftime("%Y-%m-%d"),
+        "latest_observed_price": latest_price,
+        "predicted_price": predicted_price,
+        "change_percent": change_percent,
+        "direction": "Tăng" if change_percent > 0 else "Giảm" if change_percent < 0 else "Không đổi",
+        "forecast_label": f"Sau {horizon} phiên quan sát hợp lệ tiếp theo",
+        "model_version": metadata["model_version"],
+        "training_target_end_date": metadata["training_target_end_date"],
+    }

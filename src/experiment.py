@@ -4,22 +4,22 @@ import json
 import pandas as pd
 import sys
 
-from .config import FORECASTS_PATH, METRICS_PATH, SPLIT_BOUNDARIES
+from .config import FORECASTS_PATH, FORECAST_HORIZONS, METRICS_PATH, SPLIT_BOUNDARIES
 from .data_loader import DATE_COLUMN, PRICE_COLUMN, DEFAULT_DATA_PATH, load_brent_data
 from .evaluate import evaluate
 from .features import build_features, feature_columns
 from .predict import build_forecasts
+from .train import train_forecasting_models
 
 
-def run_experiment(data_path=DEFAULT_DATA_PATH):
+def run_historical_experiment(data_path=DEFAULT_DATA_PATH):
+    """Run only the frozen historical evaluation and write its result files."""
     raw = pd.read_csv(data_path)
     data = load_brent_data(data_path)
-    if len(data) != 2982:
-        raise ValueError(f"Kỳ vọng 2.982 quan sát hợp lệ, nhận được {len(data):,}.")
 
     features = build_features(data)
     split_counts = {}
-    for horizon in (1, 5):
+    for horizon in FORECAST_HORIZONS:
         dates = pd.to_datetime(features[f"target_date_{horizon}"])
         split_counts[str(horizon)] = {
             "train": int((dates <= pd.Timestamp(SPLIT_BOUNDARIES["train_end"])).sum()),
@@ -66,12 +66,21 @@ def run_experiment(data_path=DEFAULT_DATA_PATH):
     return forecasts, metrics, report
 
 
+def run_experiment(data_path=DEFAULT_DATA_PATH):
+    """Complete historical evaluation, then save production inference models."""
+    forecasts, metrics, report = run_historical_experiment(data_path)
+    training_data = load_brent_data(data_path)
+    bundle = train_forecasting_models(training_data)
+    return forecasts, metrics, report, bundle
+
+
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    forecasts, metrics, report = run_experiment()
+    forecasts, metrics, report, bundle = run_experiment()
     print(
         f"{report['valid_observations']:,} quan sát hợp lệ; "
-        f"{len(forecasts):,} dự báo; kết quả: {METRICS_PATH}"
+        f"{len(forecasts):,} dự báo lịch sử; kết quả: {METRICS_PATH}; "
+        f"artifact suy luận: {bundle['latest_data_date']}"
     )
     print(metrics.to_string(index=False, float_format=lambda value: f"{value:.4f}"))

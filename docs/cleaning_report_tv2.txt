@@ -1,0 +1,7 @@
+1. Doc du lieu tho: 3064 dong, cot = ['observation_date', 'DCOILBRENTEU']
+2. Gioi han 2015-01-01 -> 2026-09-30: loai 0 dong ngoai khoang
+3. Ngay trung lap: 0 (giu ban ghi cuoi neu co)
+4. Gia tri thieu: 82 dong -> loai bo, ghi tai removed_rows.csv
+5. Gia <= 0: 0 dong
+   Min 9.12 (2020-04-21), Max 138.21 (2026-04-07) -> la bien dong thi truong that, giu nguyen
+6. Xuat brent_clean.csv: 2982 dong, 2015-01-02 -> 2026-09-30

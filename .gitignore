@@ -25,3 +25,5 @@ results/*
 !results/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/brent_clean.csv
+!data/processed/removed_rows.csv

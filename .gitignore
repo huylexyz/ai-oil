@@ -23,7 +23,16 @@ models/*
 !models/.gitkeep
 results/*
 !results/.gitkeep
+!results/eda/
+results/eda/*
+!results/eda/01_gia_lich_su.png
+!results/eda/02_theo_nam.png
+!results/eda/03_return_volatility.png
+!results/eda/04_acf.png
+!results/eda/05_tuong_quan_dac_trung.png
+!results/eda/06_ma_tran_tuong_quan.png
 data/processed/*
 !data/processed/.gitkeep
 !data/processed/brent_clean.csv
 !data/processed/removed_rows.csv
+!data/processed/brent_features.csv

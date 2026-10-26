@@ -24,6 +24,8 @@ python -m streamlit run app.py
 
 Đặt CSV trong `data/raw/`. Mặc định ứng dụng đọc `data/raw/DCOILBRENTEU_2015-2026.csv`, với cột ngày `observation_date` và cột giá `DCOILBRENTEU`. Dữ liệu thiếu được bỏ qua khi vẽ lịch sử. Không có dữ liệu hay kết quả mô phỏng được tạo làm dữ liệu nghiên cứu.
 
+Quy trình dữ liệu TV2/TV3 có thể chạy lại bằng `python scripts/clean_data.py` rồi `python -m src.features`. Kết quả lần lượt được lưu tại `data/processed/brent_clean.csv` và `data/processed/brent_features.csv`; báo cáo làm sạch nằm trong `docs/`. Notebook EDA đã chuẩn hóa đường dẫn cho cấu trúc repo tại `notebooks/01_EDA.ipynb`.
+
 ## Quy ước tích hợp
 
 - Module Python đặt trong `src/`; đường dẫn dữ liệu và cấu hình tập trung trong `src/config.py`.

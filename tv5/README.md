@@ -16,11 +16,12 @@ results/
 
 ## Cách chạy
 Chạy từ gốc repository sau khi PR TV3 cung cấp `data/processed/brent_features.csv`.
-Artifact bàn giao được tạo bằng Python 3.12.3, scikit-learn 1.8.0 và joblib 1.5.3;
-nên dùng đúng các phiên bản này khi nạp model trong môi trường triển khai.
+Artifact bàn giao được tạo bằng Python 3.12.3, scikit-learn 1.8.0 và joblib 1.5.3.
+Môi trường chung với TV4/TV6 đã được kiểm thử trên Python 3.14.5,
+scikit-learn 1.8.0 và joblib 1.5.3; triển khai trên nền tảng khác cần kiểm tra lại.
 
 ```
-pip install -r requirements.txt
+python -m pip install -r requirements.txt -r tv5/requirements.txt
 python tv5/train_rf.py
 ```
 Chạy lại cho kết quả giống nhau (`random_state=42`) nếu cùng phiên bản thư viện (xem `library_versions` trong metadata).

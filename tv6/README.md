@@ -112,11 +112,13 @@ trong các phép chia của mô hình đã huấn luyện.
 
 Chạy từ thư mục gốc repository `C:\AI\ai-oil` bằng PowerShell.
 Cần có file `data/processed/brent_features.csv` của TV3 ở đúng vị trí trước khi chạy.
+Môi trường chung với TV4/TV5 đã được kiểm thử trên Python 3.14.5;
+triển khai trên nền tảng khác cần kiểm tra lại phiên bản thư viện và artifact.
 Nhánh PR này xuất phát từ `origin/main` chưa chứa TV3; cần tích hợp PR #1 và #2 trước khi chạy trực tiếp trong checkout này.
 
 ```powershell
 cd C:\AI\ai-oil
-python -m pip install -r tv6/requirements.txt
+python -m pip install -r requirements.txt -r tv6/requirements.txt
 python tv6/check_data.py
 python tv6/verify_handover.py
 ```

@@ -43,7 +43,7 @@ python -m pip install -r requirements.txt -r tv4/requirements.txt
 ```
 
 ## 4. Dữ liệu đầu vào
-Đọc dữ liệu TV3 tại `data/processed/brent_features.csv` ở gốc repository. Nhánh này xuất phát từ `origin/main` chưa chứa TV3; cần tích hợp PR #1 và #2 trước khi chạy trực tiếp trên checkout này. Ridge sử dụng đúng 29 đặc trưng được liệt kê trong `ridge_regression.py`, cùng các cột nhãn và phân chia `target_1`, `target_5`, `target_date_1`, `target_date_5`, `split_1`, `split_5`.
+Đọc dữ liệu TV3 tại `data/processed/brent_features.csv` ở gốc repository. `main` hiện đã có dữ liệu TV2 và bộ 29 đặc trưng TV3. Ridge sử dụng đúng 29 đặc trưng được liệt kê trong `ridge_regression.py`, cùng các cột nhãn và phân chia `target_1`, `target_5`, `target_date_1`, `target_date_5`, `split_1`, `split_5`.
 
 Việc chia Train/Validation/Test được kế thừa từ dữ liệu TV3 và dựa trên ngày mục tiêu.
 

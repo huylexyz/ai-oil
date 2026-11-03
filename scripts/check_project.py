@@ -41,6 +41,8 @@ def main() -> int:
         state = "có khung; chờ bàn giao chức năng" if path.is_file() else "chưa có"
         if module == "data_loader.py" and path.is_file():
             state = "đã có loader dữ liệu lịch sử"
+        if module == "features.py" and path.is_file():
+            state = "đã có feature engineering TV3"
         print(f"src/{module}: {state}")
 
     artifacts = [

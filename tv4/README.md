@@ -20,7 +20,7 @@ Brent_TV4/
 ```
 
 ## 3. Môi trường và cài đặt
-Khuyến nghị Python 3.10 trở lên. Tạo môi trường ảo:
+Môi trường chung đã được kiểm thử trên Python 3.14.5; chưa xác nhận các phiên bản Python khác. Tạo môi trường ảo:
 
 ```bash
 python -m venv .venv
@@ -39,7 +39,7 @@ source .venv/bin/activate
 Cài dependencies:
 ```bash
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt -r tv4/requirements.txt
 ```
 
 ## 4. Dữ liệu đầu vào

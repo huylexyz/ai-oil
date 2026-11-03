@@ -1,0 +1,92 @@
+{
+  "model": "RandomForestRegressor",
+  "horizon": 5,
+  "target_column": "target_5",
+  "features": [
+    "price",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_5",
+    "lag_10",
+    "lag_20",
+    "ret_1",
+    "ret_5",
+    "ret_10",
+    "ret_20",
+    "ret_1_lag1",
+    "ret_1_lag2",
+    "ret_1_lag3",
+    "ma_5",
+    "price_ma_5_ratio",
+    "ma_10",
+    "price_ma_10_ratio",
+    "ma_20",
+    "price_ma_20_ratio",
+    "ma_50",
+    "price_ma_50_ratio",
+    "ma_5_20_ratio",
+    "vol_5",
+    "vol_10",
+    "vol_20",
+    "range_20",
+    "dayofweek",
+    "month"
+  ],
+  "n_features": 29,
+  "best_params": {
+    "n_estimators": 200,
+    "max_depth": null,
+    "min_samples_leaf": 2,
+    "max_features": 1.0
+  },
+  "random_state": 42,
+  "selection_metric": "validation_RMSE",
+  "best_validation_MAE": 2.9466161876794796,
+  "best_validation_RMSE": 3.775650839551728,
+  "fit_data": "train + validation (da purge ranh gioi Val/Test)",
+  "train_rows": 1981,
+  "validation_rows": 505,
+  "test_rows": 442,
+  "train_rows_used_for_tuning": 1977,
+  "trainval_rows_used_for_final_fit": 2482,
+  "purged_boundary_samples": {
+    "enabled": true,
+    "train_val": 4,
+    "val_test": 4,
+    "train_val_observation_dates": [
+      "2022-12-16",
+      "2022-12-19",
+      "2022-12-20",
+      "2022-12-21"
+    ],
+    "val_test_observation_dates": [
+      "2024-12-17",
+      "2024-12-18",
+      "2024-12-19",
+      "2024-12-20"
+    ]
+  },
+  "trainval_observation_range": [
+    "2015-03-13",
+    "2024-12-16"
+  ],
+  "trainval_target_date_range": [
+    "2015-03-20",
+    "2024-12-23"
+  ],
+  "test_observation_range": [
+    "2024-12-23",
+    "2026-09-23"
+  ],
+  "model_file": "models/rf_model_t5.joblib",
+  "test_predictions_file": "results/rf_predictions_test_t5.csv",
+  "library_versions": {
+    "python": "3.12.3",
+    "scikit-learn": "1.8.0",
+    "pandas": "3.0.2",
+    "numpy": "2.4.4",
+    "joblib": "1.5.3"
+  },
+  "created_at_utc": "2026-11-03T05:44:20Z"
+}

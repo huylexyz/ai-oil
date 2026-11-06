@@ -200,3 +200,26 @@ ranh giới thời gian giữa các mô hình trước khi so sánh.
 
 Kết quả Test chỉ phục vụ đánh giá cuối; không dùng để
 quay lại lựa chọn cấu hình.
+
+## Bổ sung horizon 2, 3 và 4
+
+Chạy từ gốc repository trong môi trường chung đã cài `tv6/requirements.txt`:
+
+```bash
+python -m tv6.horizons_2_4
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Script mới chỉ đọc `data/processed/brent_features_h{2,3,4}.csv` do TV3 bàn giao. Mỗi mô hình dùng đúng 29 cột `FEATURE_COLUMNS` theo thứ tự chính thức, `target_{h}` làm nhãn và `split_{h}` để chia tập. Giữ nguyên 18 cấu hình tìm kiếm, early stopping 50 vòng, seed 42 và các thiết lập cố định của TV6. Chọn cấu hình bằng Validation RMSE; mô hình cuối bỏ early stopping và dùng số vòng tốt nhất đã chọn. Test không tham gia tuning hoặc final fit.
+
+Tại ranh giới Train/Validation, loại mẫu Train có `target_date_{h}` sau ngày quan sát Validation đầu tiên. Tại ranh giới Validation/Test, loại mẫu Validation có `target_date_{h}` sau ngày quan sát Test đầu tiên. Số mẫu loại tại mỗi ranh giới là 1/2/3 cho h2/h3/h4. Train dùng tuning: 1.984→1.983, 1.983→1.981, 1.982→1.979. Validation dùng final fit: 505→504, 505→503, 505→502. Fit cuối dùng 2.488/2.486/2.484 mẫu.
+
+| Horizon | max_depth | learning_rate | min_child_weight | Số cây | Validation RMSE | Test MAE | Test RMSE |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 3 | 0.03 | 10 | 176 | 2.288650 | 2.760181 | 4.207893 |
+| 3 | 3 | 0.05 | 5 | 93 | 2.789931 | 3.593453 | 5.283781 |
+| 4 | 2 | 0.03 | 3 | 127 | 3.150565 | 4.030534 | 6.078837 |
+
+MAE/RMSE tính bằng USD/thùng. Trên Test, XGBoost h2 và h4 có MAE thấp nhất trong Naive, Ridge, Random Forest và XGBoost; XGBoost h3 có cả MAE và RMSE cao nhất. Không chọn lại tham số theo Test.
+
+Mỗi horizon mới tạo `models/xgb_horizon_{h}.joblib`, `results/xgb_predictions_test_h{h}.csv`, `results/xgb_summary_h{h}.json` và bốn file tuning dưới `results/tuning/` theo quy ước h1/h5. Mỗi CSV dự báo có đúng 442 dòng Test. Cấu hình baseline cũ nằm trong 18 trial, nên không cần chạy riêng script baseline. Script mới từ chối ghi đè file đã có. Toàn bộ model, CSV, summary, bảng tuning và file gộp của h1/h5 giữ nguyên.

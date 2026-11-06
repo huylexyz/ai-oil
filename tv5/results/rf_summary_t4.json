@@ -1,0 +1,68 @@
+{
+  "horizon": 4,
+  "train_rows": 1982,
+  "validation_rows": 505,
+  "test_rows": 442,
+  "purged_boundary_samples": {
+    "enabled": true,
+    "train_val": 3,
+    "val_test": 3,
+    "train_val_observation_dates": [
+      "2022-12-20",
+      "2022-12-21",
+      "2022-12-22"
+    ],
+    "val_test_observation_dates": [
+      "2024-12-19",
+      "2024-12-20",
+      "2024-12-23"
+    ]
+  },
+  "train_rows_used_for_tuning": 1979,
+  "trainval_rows_used_for_final_fit": 2484,
+  "best_params": {
+    "n_estimators": 300,
+    "max_depth": null,
+    "min_samples_leaf": 2,
+    "max_features": 0.8
+  },
+  "best_validation_MAE": 2.742252047252343,
+  "best_validation_RMSE": 3.3963065875066767,
+  "test_MAE": 4.175802145558687,
+  "test_RMSE": 5.712405327282507,
+  "features": [
+    "price",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_5",
+    "lag_10",
+    "lag_20",
+    "ret_1",
+    "ret_5",
+    "ret_10",
+    "ret_20",
+    "ret_1_lag1",
+    "ret_1_lag2",
+    "ret_1_lag3",
+    "ma_5",
+    "price_ma_5_ratio",
+    "ma_10",
+    "price_ma_10_ratio",
+    "ma_20",
+    "price_ma_20_ratio",
+    "ma_50",
+    "price_ma_50_ratio",
+    "ma_5_20_ratio",
+    "vol_5",
+    "vol_10",
+    "vol_20",
+    "range_20",
+    "dayofweek",
+    "month"
+  ],
+  "test_predictions_file": "results/rf_predictions_test_t4.csv",
+  "model_file": "models/rf_model_t4.joblib",
+  "fit_seconds_including_tuning": 20.21,
+  "metadata_file": "models/rf_model_t4_metadata.json"
+}

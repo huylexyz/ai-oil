@@ -60,3 +60,26 @@ y = model.predict(X[meta["features"]])   # giữ đúng thứ tự cột
 | 5 | n=200, depth=None, leaf=2, max_features=1.0 | 2.9466 | 3.7757 |
 
 Chỉ số Test do TV8 đánh giá độc lập từ các file predictions.
+
+## Bổ sung horizon 2, 3 và 4
+
+Chạy từ gốc repository trong môi trường chung đã cài `tv5/requirements.txt`:
+
+```bash
+python -m tv5.horizons_2_4
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Script mới chỉ đọc ba file `data/processed/brent_features_h{2,3,4}.csv` của TV3. Đầu vào mô hình giữ đúng 29 cột `FEATURE_COLUMNS` theo thứ tự chính thức; nhãn là `target_{h}`, tập dữ liệu lấy từ `split_{h}`. Giữ nguyên 6 cấu hình `PARAM_GRID`, `random_state=42`, và chọn tham số bằng **Validation RMSE**. Test chỉ được dùng sau khi chọn tham số và fit cuối.
+
+Trước tuning, loại mẫu Train có `target_date_{h}` sau `observation_date` đầu tiên của Validation. Trước final fit, loại mẫu Validation có `target_date_{h}` sau `observation_date` đầu tiên của Test. Tương ứng h2/h3/h4, mỗi ranh giới loại 1/2/3 mẫu. Final fit dùng toàn bộ Train và phần Validation còn hợp lệ, giống quy trình TV5 h5. Số mẫu Train trước/sau purge là 1.984/1.983 (h2), 1.983/1.981 (h3), 1.982/1.979 (h4). Số mẫu fit cuối là 2.488, 2.486, 2.484.
+
+Mỗi horizon mới có `models/rf_model_t{h}.joblib`, `models/rf_model_t{h}_metadata.json`, `results/rf_predictions_test_t{h}.csv`, `results/rf_tuning_h{h}.csv` và `results/rf_summary_t{h}.json`. Mỗi CSV dự báo có đúng 442 dòng Test theo schema cũ. Script từ chối ghi đè sản phẩm đã tồn tại. File gộp `results/rf_predictions_test.csv` và mọi sản phẩm h1/h5 giữ nguyên.
+
+| Horizon | n_estimators | max_depth | min_samples_leaf | max_features | Test MAE | Test RMSE |
+|---|---:|---|---:|---:|---:|---:|
+| 2 | 300 | None | 2 | 0.8 | 2.8054 | 4.1433 |
+| 3 | 300 | None | 2 | 0.8 | 3.5612 | 5.0009 |
+| 4 | 300 | None | 2 | 0.8 | 4.1758 | 5.7124 |
+
+MAE/RMSE tính bằng USD/thùng. Trên Test, MAE của Random Forest h2/h3/h4 cao hơn Naive và Ridge tương ứng, còn RMSE thấp hơn cả hai. Không chọn lại tham số theo kết quả Test.

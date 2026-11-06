@@ -99,11 +99,7 @@ def _load_model(model: str, horizon: int, expected_features: list[str]):
 
 
 def predict_latest(model: str, horizon: int) -> dict:
-    """Predict after the last observed session, without guessing a target date.
-
-    ``observation_date`` identifies the data used. Horizons count future valid
-    Brent observations, which cannot be dated from the current CSV alone.
-    """
+    """Predict after the last observed session, without guessing a target date."""
     if model not in MODELS:
         raise ValueError(f"Model không hợp lệ: {model!r}; chọn {MODELS}")
     if isinstance(horizon, bool) or not isinstance(horizon, (int, np.integer)) or horizon not in HORIZONS:

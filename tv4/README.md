@@ -111,3 +111,26 @@ Naive hiện dùng `predicted = price` cho cả horizon 1 và 5. Giữ thống n
 
 ## 9. Lưu ý đánh giá
 Validation được dùng để chọn alpha. Test chỉ dùng để đánh giá cuối cùng; không dùng Test để chọn tham số hoặc huấn luyện mô hình. Khi TV8 đánh giá kết quả cuối cùng, lọc `split == test` trong từng file dự báo.
+
+## 10. Bổ sung horizon 2, 3 và 4
+
+Chạy từ gốc repository trong môi trường chung đã cài `tv4/requirements.txt`:
+
+```bash
+python -m tv4.horizons_2_4
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Script mới chỉ đọc `data/processed/brent_features_h2.csv`, `brent_features_h3.csv` và `brent_features_h4.csv` do TV3 bàn giao. Đầu vào Ridge là đúng 29 cột `FEATURE_COLUMNS`, cùng thứ tự với `FEATURES` của TV4. Naive dùng `predicted = price` tại ngày quan sát. Các file dự báo mới có cùng bảy cột với CSV cũ nhưng **chỉ chứa 442 dòng Test** (`split=test`) cho mỗi mô hình/horizon; không tạo dự báo Train/Validation giả.
+
+Ridge giữ nguyên pipeline `SimpleImputer → StandardScaler → Ridge` và tập alpha `0.01, 0.1, 1, 10, 100`. Alpha được chọn theo MAE trên Validation. Trước khi tuning, mẫu Train có ngày mục tiêu sau ngày quan sát Validation đầu tiên bị loại; trước final fit, mẫu Validation có ngày mục tiêu sau ngày quan sát Test đầu tiên bị loại. Số mẫu purge tại mỗi ranh giới là 1/2/3 tương ứng h2/h3/h4. Mô hình cuối fit trên Train cùng phần Validation hợp lệ, sau đó mới dự báo Test.
+
+| Horizon | Alpha chọn | Naive Test MAE | Naive Test RMSE | Ridge Test MAE | Ridge Test RMSE |
+|---|---:|---:|---:|---:|---:|
+| 2 | 1 | 2.7798 | 4.2703 | 2.7785 | 4.2488 |
+| 3 | 10 | 3.4797 | 5.2305 | 3.5225 | 5.2637 |
+| 4 | 100 | 4.0442 | 5.9696 | 4.0668 | 6.1800 |
+
+MAE/RMSE tính bằng USD/thùng. Trên Test, Ridge h3 và h4 kém Naive theo cả hai chỉ số; không dùng kết quả Test để chọn lại alpha.
+
+Sản phẩm mới là `models/ridge_horizon_{2,3,4}.joblib`, `predictions/naive_horizon_{2,3,4}.csv` và `predictions/ridge_horizon_{2,3,4}.csv`. Script từ chối ghi đè file đã tồn tại. Sản phẩm horizon 1 và 5 tiếp tục dùng các script và file đã nghiệm thu ở trên.

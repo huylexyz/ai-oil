@@ -6,12 +6,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import joblib
 import numpy as np
 import pandas as pd
 
 from src.config import PROCESSED_DATA_DIR, PROJECT_ROOT
 from src.features import FEATURE_COLUMNS, build_features
-from src.predict import CLEAN_DATA_FILE, MODEL_FILES, RF_METADATA_FILES, predict_latest
+from src.predict import (
+    CLEAN_DATA_FILE, HORIZONS, MODEL_FILES, RF_METADATA_FILES,
+    _latest_input, _load_model, predict_latest,
+)
 
 
 class PredictLatestTests(unittest.TestCase):
@@ -19,10 +23,12 @@ class PredictLatestTests(unittest.TestCase):
     def setUpClass(cls):
         cls.clean = pd.read_csv(CLEAN_DATA_FILE)
 
-    def test_all_eight_latest_predictions_and_formulas(self):
+    def test_all_twenty_latest_predictions_and_formulas(self):
         latest = self.clean.iloc[-1]
+        self.assertEqual(latest["observation_date"], "2026-09-30")
+        self.assertEqual(latest["DCOILBRENTEU"], 115.91)
         for model in ("Naive", "Ridge", "Random Forest", "XGBoost"):
-            for horizon in (1, 5):
+            for horizon in HORIZONS:
                 with self.subTest(model=model, horizon=horizon):
                     result = predict_latest(model, horizon)
                     self.assertEqual(list(result), [
@@ -31,8 +37,13 @@ class PredictLatestTests(unittest.TestCase):
                     ])
                     self.assertEqual(result["model"], model)
                     self.assertEqual(result["horizon"], horizon)
+                    self.assertIsInstance(result["horizon"], int)
+                    self.assertIsInstance(result["observation_date"], str)
                     self.assertEqual(result["observation_date"], latest["observation_date"])
                     self.assertEqual(result["last_price"], latest["DCOILBRENTEU"])
+                    for key in ("last_price", "predicted_price", "absolute_change", "percent_change"):
+                        self.assertIsInstance(result[key], float)
+                        self.assertTrue(np.isfinite(result[key]))
                     self.assertTrue(np.isfinite(result["predicted_price"]))
                     self.assertAlmostEqual(
                         result["absolute_change"], result["predicted_price"] - result["last_price"]
@@ -43,18 +54,55 @@ class PredictLatestTests(unittest.TestCase):
                     if model == "Naive":
                         self.assertEqual(result["predicted_price"], result["last_price"])
 
-    def test_two_official_test_observations_for_all_eight_combinations(self):
+    def test_accepted_horizon_one_and_five_predictions_unchanged(self):
+        expected = {
+            ("Naive", 1): 115.91,
+            ("Naive", 5): 115.91,
+            ("Ridge", 1): 116.31612562184813,
+            ("Ridge", 5): 115.52803924740522,
+            ("Random Forest", 1): 116.016102526455,
+            ("Random Forest", 5): 114.09971291666659,
+            ("XGBoost", 1): 116.5431900024414,
+            ("XGBoost", 5): 112.3205337524414,
+        }
+        for (model, horizon), price in expected.items():
+            with self.subTest(model=model, horizon=horizon):
+                result = predict_latest(model, horizon)
+                np.testing.assert_allclose(result["predicted_price"], price, rtol=1e-10, atol=1e-8)
+
+    def test_final_artifacts_and_latest_29_features(self):
+        observation_date, last_price, latest = _latest_input()
+        self.assertEqual(observation_date.strftime("%Y-%m-%d"), "2026-09-30")
+        self.assertEqual(last_price, 115.91)
+        self.assertEqual(latest.shape, (1, 29))
+        self.assertEqual(latest.columns.tolist(), list(FEATURE_COLUMNS))
+        self.assertFalse(any(name.startswith(("target_", "split_")) for name in latest.columns))
+        for model in ("Ridge", "Random Forest", "XGBoost"):
+            for horizon in HORIZONS:
+                with self.subTest(model=model, horizon=horizon):
+                    path = MODEL_FILES[(model, horizon)]
+                    self.assertTrue(path.is_file(), path)
+                    estimator = _load_model(model, horizon, latest.columns.tolist())
+                    self.assertEqual(estimator.n_features_in_, 29)
+                    self.assertEqual(list(estimator.feature_names_in_), list(FEATURE_COLUMNS))
+                    if model == "XGBoost":
+                        self.assertEqual(joblib.load(path)["stage"], "final_trainval")
+                    if model == "Random Forest":
+                        self.assertTrue(RF_METADATA_FILES[horizon].is_file())
+
+    def test_two_official_test_observations_for_all_twenty_combinations(self):
         source = pd.read_csv(PROCESSED_DATA_DIR / "brent_features.csv")
         dates = source.loc[source["split_1"].eq("test"), "observation_date"].iloc[[0, 200]]
         csv_paths = {
-            ("Naive", h): PROJECT_ROOT / f"tv4/predictions/naive_horizon_{h}.csv" for h in (1, 5)
+            ("Naive", h): PROJECT_ROOT / f"tv4/predictions/naive_horizon_{h}.csv" for h in HORIZONS
         } | {
-            ("Ridge", h): PROJECT_ROOT / f"tv4/predictions/ridge_horizon_{h}.csv" for h in (1, 5)
+            ("Ridge", h): PROJECT_ROOT / f"tv4/predictions/ridge_horizon_{h}.csv" for h in HORIZONS
         } | {
-            ("Random Forest", h): PROJECT_ROOT / f"tv5/results/rf_predictions_test_t{h}.csv" for h in (1, 5)
+            ("Random Forest", h): PROJECT_ROOT / f"tv5/results/rf_predictions_test_t{h}.csv" for h in HORIZONS
         } | {
-            ("XGBoost", h): PROJECT_ROOT / f"tv6/results/xgb_predictions_test_h{h}.csv" for h in (1, 5)
+            ("XGBoost", h): PROJECT_ROOT / f"tv6/results/xgb_predictions_test_h{h}.csv" for h in HORIZONS
         }
+        self.assertEqual(len(csv_paths), 20)
         with tempfile.TemporaryDirectory() as directory:
             clean_path = Path(directory) / "brent_clean.csv"
             for date in dates:
@@ -75,7 +123,10 @@ class PredictLatestTests(unittest.TestCase):
                             )
 
     def test_model_and_horizon_rejected(self):
-        for model, horizon in (("Unknown", 1), ("Ridge", 2), ("Ridge", True), ("Ridge", "1")):
+        for model, horizon in (
+            ("Unknown", 1), ("Ridge", 0), ("Ridge", 6),
+            ("Ridge", True), ("Ridge", "1"), ("Ridge", 1.5),
+        ):
             with self.subTest(model=model, horizon=horizon):
                 with self.assertRaises(ValueError):
                     predict_latest(model, horizon)
@@ -127,12 +178,25 @@ class PredictLatestTests(unittest.TestCase):
 
     def test_invalid_prediction_is_rejected(self):
         class BadModel:
-            def predict(self, inputs):
-                return [np.nan]
+            def __init__(self, value):
+                self.value = value
 
-        with patch("src.predict._load_model", return_value=BadModel()):
-            with self.assertRaisesRegex(ValueError, "Giá dự báo"):
-                predict_latest("Ridge", 1)
+            def predict(self, inputs):
+                return [self.value]
+
+        for value in (np.nan, np.inf, -1):
+            with self.subTest(value=value):
+                with patch("src.predict._load_model", return_value=BadModel(value)):
+                    with self.assertRaisesRegex(ValueError, "Giá dự báo"):
+                        predict_latest("Ridge", 2)
+
+        class IncompatibleModel:
+            def predict(self, inputs):
+                raise ValueError("Sai số đặc trưng")
+
+        with patch("src.predict._load_model", return_value=IncompatibleModel()):
+            with self.assertRaisesRegex(RuntimeError, "không tương thích"):
+                predict_latest("Ridge", 2)
 
 
 if __name__ == "__main__":

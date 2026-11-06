@@ -12,20 +12,21 @@ from .config import PROCESSED_DATA_DIR, PROJECT_ROOT
 from .features import FEATURE_COLUMNS, PRICE, build_features, feature_columns
 
 CLEAN_DATA_FILE = PROCESSED_DATA_DIR / "brent_clean.csv"
+MODELS = ("Naive", "Ridge", "Random Forest", "XGBoost")
+HORIZONS = (1, 2, 3, 4, 5)
 MODEL_FILES = {
-    ("Ridge", 1): PROJECT_ROOT / "tv4/models/ridge_horizon_1.joblib",
-    ("Ridge", 5): PROJECT_ROOT / "tv4/models/ridge_horizon_5.joblib",
-    ("Random Forest", 1): PROJECT_ROOT / "tv5/models/rf_model_t1.joblib",
-    ("Random Forest", 5): PROJECT_ROOT / "tv5/models/rf_model_t5.joblib",
-    ("XGBoost", 1): PROJECT_ROOT / "tv6/models/xgb_horizon_1.joblib",
-    ("XGBoost", 5): PROJECT_ROOT / "tv6/models/xgb_horizon_5.joblib",
+    (model, horizon): PROJECT_ROOT / pattern.format(h=horizon)
+    for model, pattern in (
+        ("Ridge", "tv4/models/ridge_horizon_{h}.joblib"),
+        ("Random Forest", "tv5/models/rf_model_t{h}.joblib"),
+        ("XGBoost", "tv6/models/xgb_horizon_{h}.joblib"),
+    )
+    for horizon in HORIZONS
 }
 RF_METADATA_FILES = {
-    1: PROJECT_ROOT / "tv5/models/rf_model_t1_metadata.json",
-    5: PROJECT_ROOT / "tv5/models/rf_model_t5_metadata.json",
+    horizon: PROJECT_ROOT / f"tv5/models/rf_model_t{horizon}_metadata.json"
+    for horizon in HORIZONS
 }
-MODELS = ("Naive", "Ridge", "Random Forest", "XGBoost")
-HORIZONS = (1, 5)
 
 
 def _latest_input() -> tuple[pd.Timestamp, float, pd.DataFrame]:
@@ -103,7 +104,7 @@ def predict_latest(model: str, horizon: int) -> dict:
     if model not in MODELS:
         raise ValueError(f"Model không hợp lệ: {model!r}; chọn {MODELS}")
     if isinstance(horizon, bool) or not isinstance(horizon, (int, np.integer)) or horizon not in HORIZONS:
-        raise ValueError(f"Horizon không hợp lệ: {horizon!r}; chọn 1 hoặc 5 phiên")
+        raise ValueError(f"Horizon không hợp lệ: {horizon!r}; chọn 1–5 phiên")
 
     observation_date, last_price, inputs = _latest_input()
     if model == "Naive":

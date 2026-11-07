@@ -7,6 +7,7 @@ from src.config import (
     FORECAST_HORIZONS,
 )
 from src.features import FEATURE_COLUMNS
+from src.predict import HORIZONS as BACKEND_HORIZONS, MODEL_FILES
 
 BASE_DIR = PROJECT_ROOT
 DATA_DIR = PROCESSED_DATA_DIR
@@ -29,17 +30,13 @@ VOLS = [5, 10, 20]
 RETS = [1, 5, 10, 20]
 
 MODELS_LIST = ["Naive", "Ridge", "Random Forest", "XGBoost"]
+# The current pages still render only the two endpoint horizons. Forecast services
+# use the complete, approved backend set until those pages are updated.
 HORIZONS = list(FORECAST_HORIZONS)
+OFFICIAL_HORIZONS = list(BACKEND_HORIZONS)
 FEATURE_COLS = list(FEATURE_COLUMNS)
 
-MODEL_FILE_CANDIDATES = {
-    ("Ridge", 1): [PROJECT_ROOT / "tv4" / "models" / "ridge_horizon_1.joblib"],
-    ("Ridge", 5): [PROJECT_ROOT / "tv4" / "models" / "ridge_horizon_5.joblib"],
-    ("Random Forest", 1): [PROJECT_ROOT / "tv5" / "models" / "rf_model_t1.joblib"],
-    ("Random Forest", 5): [PROJECT_ROOT / "tv5" / "models" / "rf_model_t5.joblib"],
-    ("XGBoost", 1): [PROJECT_ROOT / "tv6" / "models" / "xgb_horizon_1.joblib"],
-    ("XGBoost", 5): [PROJECT_ROOT / "tv6" / "models" / "xgb_horizon_5.joblib"],
-}
+MODEL_FILE_CANDIDATES = {key: [path] for key, path in MODEL_FILES.items()}
 
 REQUIRED_PRED_COLS = {
     "observation_date",

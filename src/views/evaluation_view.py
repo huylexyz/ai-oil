@@ -1,10 +1,8 @@
-import re
 import inspect
 import importlib
-import numpy as np
 import pandas as pd
 import streamlit as st
-from src.core.config import MODELS_LIST, HORIZONS
+from src.core.config import MODELS_LIST, OFFICIAL_HORIZONS
 from src.services.data_service import (
     get_all_predictions,
     get_rf_tuning_results,
@@ -20,40 +18,22 @@ import src.ui.charts as charts_module
 from src.ui.modals import open_glossary_modal
 
 
-def _normalize_da_metrics(df_metrics: pd.DataFrame, df_sub: pd.DataFrame) -> pd.DataFrame:
-    """Đảm bảo cột Directional Accuracy (%) luôn có định dạng số phần trăm XX.XX% cho mọi mô hình."""
-    df_out = df_metrics.copy()
-    da_nums = []
-    da_strs = []
-    for _, row in df_out.iterrows():
-        m_name = str(row["Mô hình"])
-        raw_str = str(row.get("Directional Accuracy (%)", ""))
-        raw_num = row.get("_da_num", None)
-
-        val = None
-        if raw_num is not None and not pd.isna(raw_num) and float(raw_num) > 0:
-            val = float(raw_num)
-        else:
-            m = re.search(r"(\d+(?:\.\d+)?)", raw_str)
-            if m:
-                val = float(m.group(1))
-
-        if val is None or pd.isna(val) or val <= 0:
-            m_df = df_sub[df_sub["model"] == m_name].sort_values("target_date")
-            if len(m_df) >= 2:
-                act_d = np.sign(np.diff(m_df["actual"].to_numpy(dtype=float)))
-                pred_d = np.sign(np.diff(m_df["predicted"].to_numpy(dtype=float)))
-                val = float(np.mean(act_d == pred_d) * 100.0)
-            else:
-                val = 50.0
-
-        val = round(val, 2)
-        da_nums.append(val)
-        da_strs.append(f"{val:.2f}%")
-
-    df_out["Directional Accuracy (%)"] = da_strs
-    df_out["_da_num"] = da_nums
-    return df_out
+def _format_metrics_for_display(raw_metrics: pd.DataFrame) -> pd.DataFrame:
+    """Format official metrics at the view boundary while retaining raw values."""
+    rows = []
+    for rank, row in enumerate(raw_metrics.itertuples(index=False), start=1):
+        rows.append({
+            "Hạng": rank,
+            "Mô hình": row.model,
+            "Số phiên": int(row.n_samples),
+            "MAE (USD)": float(row.mae),
+            "RMSE (USD)": float(row.rmse),
+            "Directional Accuracy (%)": (
+                "N/A" if pd.isna(row.directional_accuracy)
+                else f"{row.directional_accuracy:.2f}%"
+            ),
+        })
+    return pd.DataFrame(rows)
 
 
 def _call_test_comparison_chart(df_sub, selected_models, view_mode, focus_model, zoom_sessions):
@@ -108,7 +88,7 @@ def render_evaluation_view():
 
     with st.container(border=True):
         f1, f2, f3 = st.columns([1.1, 1.3, 1.6])
-        horizon = f1.selectbox("Kỳ hạn dự báo cần đánh giá", HORIZONS, format_func=lambda x: f"Kỳ hạn t+{x} ({x} phiên)")
+        horizon = f1.selectbox("Kỳ hạn dự báo cần đánh giá", OFFICIAL_HORIZONS, format_func=lambda x: f"Kỳ hạn t+{x} ({x} phiên)")
 
         df_h = df_pred[(df_pred["horizon"] == horizon) & (df_pred["split"] == "test")].copy()
         avail_models = [m for m in MODELS_LIST if m in df_h["model"].unique()]
@@ -126,7 +106,10 @@ def render_evaluation_view():
         )
         selected_models = f3.multiselect("Mô hình đối chiếu", options=avail_models, default=avail_models)
 
-        if df_h.empty or not selected_models:
+        if df_h.empty:
+            st.warning(f"Chưa có dữ liệu Test chính thức cho kỳ hạn t+{horizon}.")
+            return
+        if not selected_models:
             st.warning("Vui lòng chọn ít nhất một mô hình để đối chiếu hiệu năng.")
             return
 
@@ -158,29 +141,34 @@ def render_evaluation_view():
         return
 
     raw_metrics = compute_evaluation_metrics(df_sub, selected_models)
-    df_metrics = _normalize_da_metrics(raw_metrics, df_sub)
+    if raw_metrics.empty:
+        st.warning("Không có chỉ số đánh giá cho dữ liệu Test đã chọn.")
+        return
+    display_metrics = _format_metrics_for_display(raw_metrics)
 
-    best_rmse = df_metrics.iloc[0]
-    best_mae = df_metrics.sort_values("MAE (USD)").iloc[0]
-    best_da_row = df_metrics.sort_values("_da_num", ascending=False).iloc[0]
+    best_rmse = raw_metrics.iloc[0]
+    best_mae = raw_metrics.loc[raw_metrics["mae"].idxmin()]
+    da_candidates = raw_metrics.loc[raw_metrics["directional_accuracy"].notna()]
 
-    best_da_model = str(best_da_row["Mô hình"])
-    best_da_val = f"{float(best_da_row['_da_num']):.2f}%"
-
-    display_metrics = df_metrics.drop(columns=["_da_num"], errors="ignore")
+    if da_candidates.empty:
+        best_da_model, best_da_val = "N/A", "N/A"
+    else:
+        best_da_row = da_candidates.loc[da_candidates["directional_accuracy"].idxmax()]
+        best_da_model = str(best_da_row["model"])
+        best_da_val = f"{best_da_row['directional_accuracy']:.2f}%"
 
     render_bento_kpis([
         {
             "overline": f"Mô hình tối ưu nhất (RMSE t+{horizon})",
             "badge": "Hạng 1",
-            "value": str(best_rmse["Mô hình"]),
-            "meta": f"RMSE: ${best_rmse['RMSE (USD)']} / thùng",
+            "value": str(best_rmse["model"]),
+            "meta": f"RMSE: ${best_rmse['rmse']:.4f} / thùng",
             "tone": "success",
         },
         {
             "overline": "Sai số tuyệt đối thấp nhất (MAE)",
-            "badge": str(best_mae["Mô hình"]),
-            "value": f"${best_mae['MAE (USD)']}",
+            "badge": str(best_mae["model"]),
+            "value": f"${best_mae['mae']:.4f}",
             "meta": "Sai lệch trung bình mỗi phiên",
             "tone": "neutral",
         },
@@ -194,7 +182,7 @@ def render_evaluation_view():
         {
             "overline": "Phạm vi kiểm định độc lập",
             "badge": f"Kỳ hạn t+{horizon}",
-            "value": f"{best_rmse['Số phiên']} phiên",
+            "value": f"{best_rmse['n_samples']} phiên",
             "meta": f"{start_td.strftime('%Y-%m-%d')} → {end_td.strftime('%Y-%m-%d')}",
             "tone": "neutral",
         },
@@ -204,14 +192,14 @@ def render_evaluation_view():
     with c_table:
         with st.container(border=True):
             st.markdown(f"#### Bảng xếp hạng hiệu năng các mô hình (Kỳ hạn t+{horizon})")
-            st.caption(f"Đánh giá từ ngày {start_td} đến {end_td} ({best_rmse['Số phiên']} phiên giao dịch độc lập).")
+            st.caption(f"Đánh giá từ ngày {start_td} đến {end_td} ({best_rmse['n_samples']} phiên giao dịch độc lập).")
             render_genesis_table(display_metrics)
     with c_bar:
         with st.container(border=True):
             st.plotly_chart(charts_module.plot_bento_error_bars(display_metrics), use_container_width=True)
 
     with st.container(border=True):
-        total_sessions = max(1, int(best_rmse["Số phiên"]))
+        total_sessions = max(1, int(best_rmse["n_samples"]))
         min_zoom = min(20, total_sessions)
         default_zoom = min(60, total_sessions)
 
@@ -228,7 +216,7 @@ def render_evaluation_view():
         focus_model_choice = ctrl2.selectbox(
             "Mô hình làm nổi bật",
             options=selected_models,
-            index=selected_models.index(str(best_rmse["Mô hình"])) if str(best_rmse["Mô hình"]) in selected_models else 0,
+            index=selected_models.index(str(best_rmse["model"])) if str(best_rmse["model"]) in selected_models else 0,
         )
         if total_sessions > min_zoom:
             zoom_sessions = ctrl3.slider(

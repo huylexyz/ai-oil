@@ -1,10 +1,11 @@
+import numpy as np
 import pandas as pd
 import streamlit as st
+from src.core.config import OFFICIAL_HORIZONS
 from src.services.data_service import get_clean_data
 from src.services.forecast_service import (
     get_available_joblib_models,
     get_all_latest_forecasts,
-    generate_october_week_forecast,
 )
 from src.ui.components import (
     render_section_header,
@@ -15,18 +16,86 @@ from src.ui.components import (
 from src.ui.charts import plot_bento_october_forecast
 
 
+def _validated_forecast_rows(frame: pd.DataFrame, models: list[str]) -> pd.DataFrame:
+    required = {
+        "model", "horizon", "observation_date", "last_price",
+        "predicted_price", "absolute_change", "percent_change",
+    }
+    if not isinstance(frame, pd.DataFrame):
+        raise ValueError("Backend không trả DataFrame dự báo")
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"Thiếu cột dự báo: {sorted(missing)}")
+    expected = {(model, horizon) for model in models for horizon in OFFICIAL_HORIZONS}
+    actual = set(frame[["model", "horizon"]].itertuples(index=False, name=None))
+    if len(frame) != len(expected) or actual != expected:
+        raise ValueError("Dự báo thiếu, trùng hoặc sai tổ hợp mô hình/horizon 1–5")
+    if frame["observation_date"].isna().any() or frame["observation_date"].nunique() != 1:
+        raise ValueError("Ngày quan sát của các dự báo không thống nhất")
+    numeric = ["last_price", "predicted_price", "absolute_change", "percent_change"]
+    if any(not pd.api.types.is_numeric_dtype(frame[column]) for column in numeric):
+        raise ValueError("Giá hoặc mức thay đổi dự báo không phải số")
+    if not np.isfinite(frame[numeric].to_numpy(dtype=float)).all():
+        raise ValueError("Giá hoặc mức thay đổi dự báo không hợp lệ")
+    if frame["last_price"].nunique() != 1 or not frame["last_price"].gt(0).all():
+        raise ValueError("Giá Brent tại ngày quan sát không thống nhất hoặc không hợp lệ")
+    return frame
+
+
+def _build_forecast_table(frame: pd.DataFrame, models: list[str]) -> pd.DataFrame:
+    rows = []
+    for model in models:
+        by_horizon = frame.loc[frame["model"].eq(model)].set_index("horizon")
+        first = by_horizon.loc[1]
+        row = {
+            "Mô hình": model,
+            "Ngày quan sát gốc": first["observation_date"],
+            "Giá gốc ($)": f"${first['last_price']:.2f}",
+        }
+        for horizon in OFFICIAL_HORIZONS:
+            forecast = by_horizon.loc[horizon]
+            row[f"Dự báo t+{horizon} ($)"] = f"${forecast['predicted_price']:.2f}"
+            row[f"Biến động t+{horizon}"] = (
+                f"{forecast['absolute_change']:+.2f} USD ({forecast['percent_change']:+.2f}%)"
+            )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def render_forecast_view():
-    clean_df, has_clean = get_clean_data()
-    if not has_clean or clean_df.empty:
+    try:
+        clean_df, has_clean = get_clean_data()
+    except Exception as exc:
+        st.error(f"Không thể đọc dữ liệu Brent để thực hiện dự báo: {exc}")
+        return
+    if not has_clean or not isinstance(clean_df, pd.DataFrame) or clean_df.empty:
         st.error("Chưa tìm thấy dữ liệu lịch sử để thực hiện dự báo.")
         return
+    try:
+        required = {"observation_date", "price"}
+        missing = required.difference(clean_df.columns)
+        if missing:
+            raise ValueError(f"Dữ liệu Brent thiếu cột bắt buộc: {sorted(missing)}")
+        dates = pd.to_datetime(clean_df["observation_date"], errors="raise")
+        prices = pd.to_numeric(clean_df["price"], errors="raise")
+        if dates.isna().any() or dates.duplicated().any() or prices.isna().any():
+            raise ValueError("Dữ liệu Brent có ngày hoặc giá bị thiếu hay trùng lặp.")
+        if not np.isfinite(prices.to_numpy(dtype=float)).all() or not prices.gt(0).all():
+            raise ValueError("Giá Brent phải là số hữu hạn và dương.")
+    except Exception as exc:
+        st.error(f"Dữ liệu Brent không hợp lệ để thực hiện dự báo: {exc}")
+        return
 
-    avail_models = get_available_joblib_models()
+    try:
+        avail_models = get_available_joblib_models()
+    except Exception as exc:
+        st.error(f"Không kiểm tra được các model dự báo chính thức: {exc}")
+        return
 
     render_section_header(
         overline="02 / MULTI-HORIZON PRICE FORECAST",
-        title="Dự báo Giá dầu Brent Kỳ hạn Ngắn hạn (t+1) và Trung hạn (t+5)",
-        description="Tổng hợp kết quả dự báo xu hướng giá dầu Brent cho 1 phiên và 5 phiên giao dịch kế tiếp từ 4 mô hình học máy dựa trên trạng thái thị trường mới nhất."
+        title="Dự báo Giá dầu Brent cho 5 phiên quan sát hợp lệ tiếp theo",
+        description="Tổng hợp dự báo trực tiếp t+1 đến t+5 từ 4 phương pháp, dựa trên phiên Brent cuối cùng trong dữ liệu repository."
     )
 
     with st.container(border=True):
@@ -53,25 +122,27 @@ def render_forecast_view():
         st.warning("Vui lòng chọn ít nhất một mô hình để hiển thị dự báo.")
         return
 
-    fc_df = get_all_latest_forecasts(selected_models)
-    oct_df = generate_october_week_forecast(method="direct")
-
-    if fc_df.empty:
-        st.warning("Chưa thể tạo dự báo từ các mô hình hiện tại.")
+    try:
+        fc_df = _validated_forecast_rows(get_all_latest_forecasts(selected_models), selected_models)
+    except Exception as exc:
+        st.error(f"Không có đủ dự báo chính thức cho các mô hình đã chọn: {exc}")
         return
 
-    focus_sub = fc_df[fc_df["model"] == focus_model]
-    if focus_sub.empty:
-        focus_sub = fc_df[fc_df["model"] == fc_df["model"].iloc[0]]
+    if focus_model not in selected_models:
+        st.info(f"Mô hình tiêu điểm chưa được chọn để hiển thị; KPI dùng {selected_models[0]}.")
+        focus_model = selected_models[0]
+    focus_sub = fc_df[fc_df["model"] == focus_model].set_index("horizon")
 
     last_obs_date = str(fc_df["observation_date"].iloc[0])
     last_price = float(fc_df["last_price"].iloc[0])
 
-    row_t1 = focus_sub[focus_sub["horizon"] == 1].iloc[0]
-    row_t5 = focus_sub[focus_sub["horizon"] == 5].iloc[0]
+    row_t1 = focus_sub.loc[1]
+    row_t5 = focus_sub.loc[5]
 
     h1_all = fc_df[fc_df["horizon"] == 1]["predicted_price"]
     h5_all = fc_df[fc_df["horizon"] == 5]["predicted_price"]
+    all_forecasts = fc_df["predicted_price"]
+    chart_df = fc_df.pivot(index="horizon", columns="model", values="predicted_price").reset_index()
 
     render_bento_kpis([
         {
@@ -99,7 +170,7 @@ def render_forecast_view():
             "overline": "Đồng thuận liên mô hình (t+1 → t+5)",
             "badge": f"{len(fc_df['model'].unique())} mô hình",
             "value": f"${h1_all.mean():.2f} → ${h5_all.mean():.2f}",
-            "meta": f"Biên độ kỳ hạn t+5: ${h5_all.min():.2f} – ${h5_all.max():.2f}",
+            "meta": f"Dải dự báo 5 phiên: ${all_forecasts.min():.2f} – ${all_forecasts.max():.2f}",
             "tone": "indigo",
         },
     ])
@@ -108,33 +179,18 @@ def render_forecast_view():
         st.plotly_chart(
             plot_bento_october_forecast(
                 hist_df=clean_df.tail(hist_window),
-                oct_df=oct_df,
+                oct_df=chart_df,
                 selected_models=selected_models,
             ),
             use_container_width=True,
         )
         render_editorial_note(
             "Phương pháp dự báo đa kỳ hạn",
-            "Các mô hình sử dụng tổ hợp 29 đặc trưng kỹ thuật tại phiên đóng cửa gần nhất (30/09/2026) để ước lượng trực tiếp mức giá kỳ vọng sau 1 phiên (t+1) và 5 phiên (t+5) giao dịch tiếp theo."
+            f"Các mô hình dùng 29 đặc trưng kỹ thuật tại phiên quan sát {last_obs_date} để dự báo trực tiếp t+1 đến t+5 phiên Brent hợp lệ tiếp theo; không xác định trước ngày mục tiêu."
         )
 
     with st.container(border=True):
         st.markdown("#### Bảng đối chiếu chi tiết kết quả dự báo theo từng mô hình")
         st.caption(f"Mốc quan sát cơ sở: {last_obs_date} · Giá đóng cửa thực tế: ${last_price:.2f}/thùng.")
 
-        table_rows = []
-        for m in selected_models:
-            m_rows = fc_df[fc_df["model"] == m]
-            if len(m_rows) == 2:
-                r1 = m_rows[m_rows["horizon"] == 1].iloc[0]
-                r5 = m_rows[m_rows["horizon"] == 5].iloc[0]
-                table_rows.append({
-                    "Mô hình": m,
-                    "Ngày quan sát gốc": r1["observation_date"],
-                    "Giá gốc ($)": f"${r1['last_price']:.2f}",
-                    "Dự báo t+1 ($)": f"${r1['predicted_price']:.2f}",
-                    "Biến động t+1": f"{r1['absolute_change']:+.2f} USD ({r1['percent_change']:+.2f}%)",
-                    "Dự báo t+5 ($)": f"${r5['predicted_price']:.2f}",
-                    "Biến động t+5": f"{r5['absolute_change']:+.2f} USD ({r5['percent_change']:+.2f}%)",
-                })
-        render_genesis_table(pd.DataFrame(table_rows))
+        render_genesis_table(_build_forecast_table(fc_df, selected_models))

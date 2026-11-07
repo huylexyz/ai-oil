@@ -1,3 +1,5 @@
+import logging
+import math
 import pandas as pd
 import streamlit as st
 from src.services.data_service import get_clean_data
@@ -18,42 +20,88 @@ st.set_page_config(
 # Mặc định khóa cố định giao diện tối (Dark Mode)
 st.session_state.theme_mode = "dark"
 
-clean_df, has_clean = get_clean_data()
-avail_models = get_available_joblib_models()
-focus_m = "Random Forest" if "Random Forest" in avail_models else (avail_models[0] if avail_models else "Naive")
+sidebar_log = logging.getLogger(__name__)
+focus_m = "Random Forest"
+try:
+    avail_models = get_available_joblib_models()
+    if focus_m not in avail_models and avail_models:
+        focus_m = avail_models[0]
+except Exception as exc:
+    sidebar_log.warning("Không kiểm tra được kho model cho sidebar: %s", exc)
 
-if has_clean and len(clean_df) >= 2:
+spot_date = "không khả dụng"
+spot_price_text = spot_pct_text = low_52w_text = high_52w_text = "N/A"
+range_width = "0.0%"
+spot_pct_cls = "delta-warn"
+forecast_cards = {
+    1: ("N/A", "Thiếu dữ liệu Brent", "delta-warn"),
+    5: ("N/A", "Thiếu dữ liệu Brent", "delta-warn"),
+}
+
+try:
+    clean_df, has_clean = get_clean_data()
+    if not has_clean or not isinstance(clean_df, pd.DataFrame) or clean_df.empty:
+        raise ValueError("Thiếu dữ liệu Brent sạch")
+    required = {"observation_date", "price"}
+    if required.difference(clean_df.columns):
+        raise ValueError(f"Dữ liệu Brent thiếu cột {sorted(required.difference(clean_df.columns))}")
+    dates = pd.to_datetime(clean_df["observation_date"], errors="raise")
+    prices = pd.to_numeric(clean_df["price"], errors="raise")
+    if dates.isna().any() or dates.duplicated().any() or prices.isna().any():
+        raise ValueError("Ngày hoặc giá Brent không hợp lệ")
+    if not prices.map(math.isfinite).all() or not prices.gt(0).all():
+        raise ValueError("Giá Brent phải hữu hạn và dương")
+
+    clean_df = clean_df.assign(observation_date=dates, price=prices).sort_values("observation_date")
     last_row = clean_df.iloc[-1]
-    prev_row = clean_df.iloc[-2]
     spot_price = float(last_row["price"])
-    spot_diff = spot_price - float(prev_row["price"])
-    spot_pct = (spot_diff / float(prev_row["price"])) * 100.0
-    spot_date = pd.to_datetime(last_row["observation_date"]).strftime("%d/%m/%Y")
+    observation_date = last_row["observation_date"].strftime("%Y-%m-%d")
+    spot_date = last_row["observation_date"].strftime("%d/%m/%Y")
+    spot_price_text = f"${spot_price:.2f}"
+    if len(clean_df) >= 2:
+        previous_price = float(clean_df.iloc[-2]["price"])
+        spot_pct = (spot_price - previous_price) / previous_price * 100.0
+        spot_pct_text = f"{spot_pct:+.2f}%"
+        spot_pct_cls = "delta-pos" if spot_pct >= 0 else "delta-neg"
 
     recent_252 = clean_df["price"].tail(252)
     low_52w = float(recent_252.min())
     high_52w = float(recent_252.max())
-    range_pct = max(4.0, min(96.0, ((spot_price - low_52w) / max(high_52w - low_52w, 1e-6)) * 100.0))
-
-    try:
-        pred_t1 = float(get_latest_official_forecast(focus_m, 1)["predicted_price"])
-        pred_t5 = float(get_latest_official_forecast(focus_m, 5)["predicted_price"])
-    except Exception:
-        pred_t1, pred_t5 = spot_price, spot_price
+    low_52w_text, high_52w_text = f"${low_52w:.2f}", f"${high_52w:.2f}"
+    range_pct = max(4.0, min(96.0, (spot_price - low_52w) / max(high_52w - low_52w, 1e-6) * 100.0))
+    range_width = f"{range_pct:.1f}%"
+except Exception as exc:
+    sidebar_log.warning("Không có dữ liệu Brent hợp lệ cho sidebar: %s", exc)
+    reason = "Thiếu dữ liệu Brent" if isinstance(exc, FileNotFoundError) or str(exc).startswith("Thiếu dữ liệu Brent") else "Dữ liệu Brent không hợp lệ"
+    forecast_cards[1] = forecast_cards[5] = ("N/A", reason, "delta-warn")
 else:
-    spot_price, spot_pct, spot_date = 115.91, 1.71, "30/09/2026"
-    low_52w, high_52w, range_pct = 59.93, 138.21, 72.0
-    pred_t1, pred_t5 = 116.02, 114.10
+    for horizon in (1, 5):
+        try:
+            result = get_latest_official_forecast(focus_m, horizon)
+            if result["model"] != focus_m or result["horizon"] != horizon:
+                raise ValueError("Backend trả sai mô hình hoặc horizon")
+            if result["observation_date"] != observation_date or not math.isclose(
+                float(result["last_price"]), spot_price, rel_tol=0, abs_tol=1e-9
+            ):
+                raise ValueError("Ngày hoặc giá quan sát của dự báo không khớp dữ liệu Brent")
+            predicted = float(result["predicted_price"])
+            change = float(result["absolute_change"])
+            if not math.isfinite(predicted) or predicted <= 0 or not math.isfinite(change):
+                raise ValueError("Giá dự báo không hợp lệ")
+            if not math.isclose(change, predicted - spot_price, rel_tol=0, abs_tol=1e-8):
+                raise ValueError("Mức thay đổi dự báo không khớp giá Brent")
+            forecast_cards[horizon] = (
+                f"${predicted:.2f}",
+                f"{change:+.2f}$ ({'Tăng nhẹ' if change >= 0 else 'Điều chỉnh'})",
+                "delta-pos" if change >= 0 else "delta-warn",
+            )
+        except Exception as exc:
+            sidebar_log.warning("Dự báo sidebar %s t+%s không khả dụng: %s", focus_m, horizon, exc)
+            reason = "Thiếu model/dữ liệu" if isinstance(exc, FileNotFoundError) else "Lỗi dự báo chính thức"
+            forecast_cards[horizon] = ("N/A", reason, "delta-warn")
 
-diff_t1 = pred_t1 - spot_price
-diff_t5 = pred_t5 - spot_price
-
-spot_pct_cls = "delta-pos" if spot_pct >= 0 else "delta-neg"
-t1_cls = "delta-pos" if diff_t1 >= 0 else "delta-warn"
-t5_cls = "delta-pos" if diff_t5 >= 0 else "delta-warn"
-
-t1_status = "Tăng nhẹ" if diff_t1 >= 0 else "Điều chỉnh"
-t5_status = "Tăng nhẹ" if diff_t5 >= 0 else "Điều chỉnh"
+pred_t1_text, t1_delta_text, t1_cls = forecast_cards[1]
+pred_t5_text, t5_delta_text, t5_cls = forecast_cards[5]
 
 with st.sidebar:
     st.markdown(f"""
@@ -75,31 +123,31 @@ with st.sidebar:
     <div class="sb-spot-bento">
         <div class="sb-spot-top">
             <span>Giá khóa sổ ({spot_date})</span>
-            <span class="{spot_pct_cls}">{spot_pct:+.2f}%</span>
+            <span class="{spot_pct_cls}">{spot_pct_text}</span>
         </div>
         <div>
-            <span class="sb-spot-val">${spot_price:.2f}</span>
+            <span class="sb-spot-val">{spot_price_text}</span>
             <span class="sb-spot-unit">/ thùng</span>
         </div>
         <div class="sb-range-track" title="Vị trí giá trong biên độ 52 tuần (252 phiên)">
-            <div class="sb-range-fill" style="width: {range_pct:.1f}%;"></div>
+            <div class="sb-range-fill" style="width: {range_width};"></div>
         </div>
         <div class="sb-range-labels">
-            <span>52W L: ${low_52w:.2f}</span>
-            <span>H: ${high_52w:.2f}</span>
+            <span>52W L: {low_52w_text}</span>
+            <span>H: {high_52w_text}</span>
         </div>
     </div>
 
     <div class="sb-dual-grid">
         <div class="sb-horizon-card sb-horizon-t1">
             <div class="sb-h-label">Dự báo t+1 ({focus_m})</div>
-            <div class="sb-h-price">${pred_t1:.2f}</div>
-            <div class="sb-h-delta {t1_cls}">{diff_t1:+.2f}$ ({t1_status})</div>
+            <div class="sb-h-price">{pred_t1_text}</div>
+            <div class="sb-h-delta {t1_cls}">{t1_delta_text}</div>
         </div>
         <div class="sb-horizon-card sb-horizon-t5">
             <div class="sb-h-label">Dự báo t+5 ({focus_m})</div>
-            <div class="sb-h-price">${pred_t5:.2f}</div>
-            <div class="sb-h-delta {t5_cls}">{diff_t5:+.2f}$ ({t5_status})</div>
+            <div class="sb-h-price">{pred_t5_text}</div>
+            <div class="sb-h-delta {t5_cls}">{t5_delta_text}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)

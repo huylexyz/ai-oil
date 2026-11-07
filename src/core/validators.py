@@ -1,5 +1,5 @@
 import pandas as pd
-from src.core.config import REQUIRED_PRED_COLS
+from src.core.config import OFFICIAL_HORIZONS, REQUIRED_PRED_COLS
 
 def validate_prediction_df(df: pd.DataFrame, filename: str) -> tuple[bool, str]:
     """Kiểm tra tệp CSV dự báo có đầy đủ 6 cột bắt buộc theo quy định hay không."""
@@ -10,8 +10,8 @@ def validate_prediction_df(df: pd.DataFrame, filename: str) -> tuple[bool, str]:
     if df[["actual", "predicted"]].isna().any().any():
         return False, f"Tệp {filename} chứa giá trị rỗng (NaN) ở cột actual hoặc predicted."
 
-    if not set(df["horizon"].unique()).issubset({1, 5}):
-        return False, f"Tệp {filename} có giá trị horizon nằm ngoài {1, 5}."
+    if not set(df["horizon"].unique()).issubset(OFFICIAL_HORIZONS):
+        return False, f"Tệp {filename} có giá trị horizon nằm ngoài {OFFICIAL_HORIZONS}."
 
     return True, "Hợp lệ"
 

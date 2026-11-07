@@ -160,62 +160,73 @@ def plot_bento_historical_price(df: pd.DataFrame, selected_mas: list[int], show_
 def plot_bento_october_forecast(hist_df: pd.DataFrame, oct_df: pd.DataFrame, selected_models: list[str], **kwargs) -> go.Figure:
     layout, is_dark, model_colors, _, _ = _get_chart_theme()
 
+    if hist_df.empty or oct_df.empty:
+        raise ValueError("Thiếu dữ liệu giá quan sát hoặc dự báo")
+    if oct_df["horizon"].tolist() != [1, 2, 3, 4, 5]:
+        raise ValueError("Biểu đồ cần đủ dự báo trực tiếp cho phiên t+1 đến t+5")
+    missing_models = set(selected_models).difference(oct_df.columns)
+    if missing_models:
+        raise ValueError(f"Thiếu dự báo của mô hình: {sorted(missing_models)}")
+
     fig = go.Figure()
-    last_hist_date = hist_df["observation_date"].iloc[-1]
+    hist_dates = pd.to_datetime(hist_df["observation_date"])
+    last_hist_date = hist_dates.iloc[-1]
     last_hist_price = float(hist_df["price"].iloc[-1])
-    last_oct_date = oct_df["target_date"].max()
+    history_positions = list(range(1 - len(hist_df), 1))
+    forecast_positions = oct_df["horizon"].tolist()
     zone_accent = "#38BDF8" if is_dark else "#0284C7"
 
     fig.add_vrect(
-        x0=last_hist_date,
-        x1=last_oct_date + pd.Timedelta(days=1.6),
+        x0=0,
+        x1=5.5,
         fillcolor="rgba(56, 189, 248, 0.06)" if is_dark else "rgba(2, 132, 199, 0.05)",
         layer="below",
         line_width=0,
-        annotation_text="Dự báo tuần đầu tháng 10",
+        annotation_text="Dự báo 5 phiên tiếp theo",
         annotation_position="top left",
         annotation_font=dict(family="DM Sans, sans-serif", size=11.5, color=zone_accent),
     )
-    fig.add_vline(x=last_hist_date, line_dash="dash", line_color=zone_accent, line_width=1.2)
+    fig.add_vline(x=0, line_dash="dash", line_color=zone_accent, line_width=1.2)
 
     fig.add_trace(go.Scatter(
-        x=hist_df["observation_date"],
+        x=history_positions,
         y=hist_df["price"],
         mode="lines",
-        name="Giá thực tế (Đến 30/09/2026)",
+        name=f"Giá thực tế (Đến {last_hist_date:%d/%m/%Y})",
         line=dict(color=model_colors["Actual"], width=2.2),
         hoverlabel=dict(namelength=-1),
-        hovertemplate="$%{y:.2f}",
+        customdata=hist_dates.dt.strftime("%Y-%m-%d"),
+        hovertemplate="%{customdata}<br>$%{y:.2f}<extra></extra>",
     ))
 
     all_y = hist_df["price"].tolist()
     endpoints = []
 
     for m in selected_models:
-        if m in oct_df.columns:
-            x_vals = [last_hist_date] + oct_df["target_date"].tolist()
-            y_vals = [last_hist_price] + oct_df[m].tolist()
-            all_y.extend(y_vals)
-            m_color = model_colors.get(m, zone_accent)
-            end_val = float(oct_df[m].iloc[-1])
-            endpoints.append((m, end_val, m_color))
+        x_vals = [0] + forecast_positions
+        y_vals = [last_hist_price] + oct_df[m].tolist()
+        all_y.extend(y_vals)
+        m_color = model_colors.get(m, zone_accent)
+        end_val = float(oct_df[m].iloc[-1])
+        endpoints.append((m, end_val, m_color))
 
-            fig.add_trace(go.Scatter(
-                x=x_vals,
-                y=y_vals,
-                mode="lines+markers",
-                name=f"Dự báo: {m}",
-                line=dict(width=2.1, dash=MODEL_DASH_STYLES.get(m, "dash"), color=m_color),
-                marker=dict(size=5, color=m_color),
-                hoverlabel=dict(namelength=-1),
-                hovertemplate="$%{y:.2f}",
-            ))
+        fig.add_trace(go.Scatter(
+            x=x_vals,
+            y=y_vals,
+            mode="lines+markers",
+            name=f"Dự báo: {m}",
+            line=dict(width=2.1, dash=MODEL_DASH_STYLES.get(m, "dash"), color=m_color),
+            marker=dict(size=5, color=m_color),
+            hoverlabel=dict(namelength=-1),
+            customdata=[f"Ngày quan sát {last_hist_date:%Y-%m-%d}"] + [f"Phiên t+{h}" for h in forecast_positions],
+            hovertemplate="%{customdata}<br>$%{y:.2f}<extra></extra>",
+        ))
 
     min_y, max_y = min(all_y), max(all_y)
     span_y = max(max_y - min_y, 4.0)
     pad = max(span_y * 0.22, 1.8)
 
-    # Sắp xếp nhãn giá cuối kỳ (07/10) có khoảng cách tối thiểu để không bao giờ đè lên nhau
+    # Sắp xếp nhãn giá t+5 có khoảng cách tối thiểu để không đè lên nhau.
     endpoints.sort(key=lambda item: item[1])
     min_gap = span_y * 0.065
     prev_label_y = None
@@ -223,7 +234,7 @@ def plot_bento_october_forecast(hist_df: pd.DataFrame, oct_df: pd.DataFrame, sel
         lbl_y = raw_val if (prev_label_y is None or raw_val - prev_label_y >= min_gap) else (prev_label_y + min_gap)
         prev_label_y = lbl_y
         fig.add_annotation(
-            x=last_oct_date,
+            x=5,
             y=lbl_y,
             text=f"<b>${raw_val:.2f}</b>",
             showarrow=False,
@@ -234,9 +245,15 @@ def plot_bento_october_forecast(hist_df: pd.DataFrame, oct_df: pd.DataFrame, sel
 
     fig.update_layout(
         **layout,
-        title_text="Quỹ đạo giá thực tế tháng 9 và dự báo 5 phiên tuần đầu tháng 10/2026",
+        title_text="Quỹ đạo giá Brent quan sát và dự báo 5 phiên hợp lệ tiếp theo",
         height=420,
     )
+    history_ticks = sorted(set(np.linspace(0, len(hist_df) - 1, min(5, len(hist_df)), dtype=int).tolist()))
+    tick_values = [history_positions[index] for index in history_ticks] + forecast_positions
+    tick_labels = [hist_dates.iloc[index].strftime("%d/%m") for index in history_ticks] + [
+        f"t+{h}" for h in forecast_positions
+    ]
+    fig.update_xaxes(tickmode="array", tickvals=tick_values, ticktext=tick_labels, range=[history_positions[0], 5.6])
     fig.update_yaxes(range=[min_y - pad, max(max_y + pad, (prev_label_y or max_y) + pad * 0.6)])
     return fig
 
